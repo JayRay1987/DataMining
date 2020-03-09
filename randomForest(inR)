@@ -1,0 +1,517 @@
+#Install packages
+install.packages("randomForest")
+install.packages("tidyr")
+install.packages("C50")
+install.packages("tidyverse")
+library(tidyr)
+library(randomForest)
+library(C50)
+library(tidyverse)
+
+#Set our working directory
+setwd("C:\\Users\\Julians Laptop\\Desktop\\Data Analytics\\Advanced Data Mining\\Project\\")
+
+#Read in our pure and unpreprocessed dataset
+planPerData <- read.csv("CorkPlan.csv", header = T, na.strings=c(""), stringsAsFactors = T)
+
+#check the missing values
+sapply(planPerData, FUN=function(x) {sum(is.na(x))})
+
+#let's have a look at the data
+summary(planPerData)
+
+#let's check the split on our dependent variable, Decisions.
+Decision <- planPerData$Decision
+
+#let's look at the proportion of the split.
+prop.table(table(Decision))
+
+#FOUNDATIONS - Data Preparation, Preprocessing and Feature Engineering.
+
+#remove all Development Descriptions that are less than 100 characters so that we only include the most detailed Descriptions.
+planPerData <- subset(planPerData, nchar(as.character(planPerData$DevelopmentDescription)) >= 100)
+
+#remove all n/a values from the dependent variable, i.e. Decision
+planPerDataD1 <- planPerData[planPerData$Decision != "n/a",]
+#factor Decision to simply "yes" and "no"
+planPerDataD1$Decision <- factor(planPerDataD1$Decision, levels = c("Granted (Conditional)","Granted (Unconditional)", "Refused"), labels = c("Yes", "Yes", "No"))
+#factor ApplType into "Private" and "Business"
+planPerDataD1$ApplType <- factor(planPerDataD1$ApplType, levels = c("Private", "Business"), labels = c("Private", "Business"))
+#factor LocalApplicant into "Cork", "Dublin" or "Outside"
+planPerDataD1$LocalApplicant <- factor(planPerDataD1$LocalApplicant, levels = c("Cork", "Dublin", "Outside"), labels = c("Cork", "Dublin", "Outside"))
+#factor ApplicationType into "Retention" and "Permission"
+planPerDataD1$ApplicationType <- factor(planPerDataD1$ApplicationType, levels = c("RETENTION", "PERMISSION", "n/a", "OUTLINE PERMISSION", "PERMISSION CONSEQUENT"), labels = c("RETENTION", "PERMISSION","PERMISSION","PERMISSION","PERMISSION"))
+
+#remove unnecessary or redundant columns
+planPerDataD1[c(1:9, 11, 12, 13, 15, 16, 18, 19, 21:35)] <- NULL
+
+#remove n/a from AreaOfSite
+planPerDataD2 <- planPerDataD1[!is.na(planPerDataD1$AreaOfSite),]
+
+#OPTIONAL: remove any area less than 0.01
+#planPerDataD2 <- planPerDataD2[as.numeric(planPerDataD2$AreaOfSite) >= 0.01,]
+
+#Add a column called Exist - 1 if exist is detected and 0 if not detected in DevelopmentDescription
+ExistCol <- str_detect(planPerDataD2$DevelopmentDescription, regex("exist", ignore_case = TRUE))
+ExistCol <- factor(ExistCol, levels = c(TRUE, FALSE), labels = c(1, 0))
+planPerDataD2$Exist <- ExistCol
+
+#check the split
+table(planPerDataD2$Exist)
+
+#create a coliumn that is the Frequency count of Exist in DevelopmentDescription
+existFreqCol <- str_count(planPerDataD2$DevelopmentDescription, regex("exist", ignore_case = TRUE))
+existFreqCol <- as.numeric(existFreqCol)
+planPerDataD2$ExistFreq <- existFreqCol
+
+#Minimum and Maximum
+min(planPerDataD2$ExistFreq)
+max(planPerDataD2$ExistFreq)
+
+#Histogram
+hist(planPerDataD2$ExistFreq)
+
+#Add a column called Floor - 1 if Floor is detected and 0 if not detected in DevelopmentDescription
+FloorCol <- str_detect(planPerDataD2$DevelopmentDescription, regex("floor", ignore_case = TRUE))
+FloorCol <- factor(FloorCol, levels = c(TRUE, FALSE), labels = c(1, 0))
+planPerDataD2$Floor <- FloorCol
+
+#Check the split
+table(planPerDataD2$Floor)
+
+#create a coliumn that is the Frequency count of floor in DevelopmentDescription
+floorFreqCol <- str_count(planPerDataD2$DevelopmentDescription, regex("floor", ignore_case = TRUE))
+floorFreqCol <- as.numeric(floorFreqCol)
+planPerDataD2$FloorFreq <- floorFreqCol
+
+#Minimum and Maximum
+min(planPerDataD2$FloorFreq)
+max(planPerDataD2$FloorFreq)
+
+#Histogram
+hist(planPerDataD2$FloorFreq)
+
+#Add a column called Storey - 1 if Storey is detected and 0 if not detected in DevelopmentDescription
+StoreyCol <- str_detect(planPerDataD2$DevelopmentDescription, regex("storey", ignore_case = TRUE))
+StoreyCol <- factor(StoreyCol, levels = c(TRUE, FALSE), labels = c(1, 0))
+planPerDataD2$Storey <- StoreyCol
+
+#Check the split
+table(planPerDataD2$Storey)
+
+#create a coliumn that is the Frequency count of storey in DevelopmentDescription
+storeyFreqCol <- str_count(planPerDataD2$DevelopmentDescription, regex("storey", ignore_case = TRUE))
+storeyFreqCol <- as.numeric(storeyFreqCol)
+planPerDataD2$StoreyFreq <- storeyFreqCol
+
+#Minimum and Maximum
+min(planPerDataD2$StoreyFreq)
+max(planPerDataD2$StoreyFreq)
+
+#Histogram
+hist(planPerDataD2$StoreyFreq)
+
+#Add a column called work - 1 if work is detected and 0 if not detected in DevelopmentDescription
+workCol <- str_detect(planPerDataD2$DevelopmentDescription, regex("work", ignore_case = TRUE))
+workCol <- factor(workCol, levels = c(TRUE, FALSE), labels = c(1, 0))
+planPerDataD2$Work <- workCol
+
+#Check the split
+table(planPerDataD2$Work)
+
+#create a column that is the Frequency count of work in DevelopmentDescription
+workFreqCol <- str_count(planPerDataD2$DevelopmentDescription, regex("work", ignore_case = TRUE))
+workFreqCol <- as.numeric(workFreqCol)
+planPerDataD2$WorkFreq <- workFreqCol
+
+#Minimum and Maximum
+min(planPerDataD2$WorkFreq)
+max(planPerDataD2$WorkFreq)
+
+#Histogram
+hist(planPerDataD2$WorkFreq)
+
+#Add a column called dwell - 1 if dwell is detected and 0 if not detected in DevelopmentDescription
+dwellCol <- str_detect(planPerDataD2$DevelopmentDescription, regex("dwell", ignore_case = TRUE))
+dwellCol <- factor(dwellCol, levels = c(TRUE, FALSE), labels = c(1, 0))
+planPerDataD2$Dwell <- dwellCol
+
+#Check the split
+table(planPerDataD2$Dwell)
+
+#Frequency count
+dwellFreqCol <- str_count(planPerDataD2$DevelopmentDescription, regex("dwell", ignore_case = TRUE))
+dwellFreqCol <- as.numeric(dwellFreqCol)
+planPerDataD2$DwellFreq <- dwellFreqCol
+
+#Minimum and Maximum
+min(planPerDataD2$DwellFreq)
+max(planPerDataD2$DwellFreq)
+
+#Histogram
+hist(planPerDataD2$DwellFreq)
+
+#Add a column called site - 1 if site is detected and 0 if not detected in DevelopmentDescription
+siteCol <- str_detect(planPerDataD2$DevelopmentDescription, regex("site", ignore_case = TRUE))
+siteCol <- factor(siteCol, levels = c(TRUE, FALSE), labels = c(1, 0))
+planPerDataD2$Site <- siteCol
+
+#Check the split
+table(planPerDataD2$Site)
+
+#create a column that is the Frequency count of site in DevelopmentDescription
+siteFreqCol <- str_count(planPerDataD2$DevelopmentDescription, regex("site", ignore_case = TRUE))
+siteFreqCol <- as.numeric(siteFreqCol)
+planPerDataD2$SiteFreq <- siteFreqCol
+
+#Minimum and Maximum
+min(planPerDataD2$SiteFreq)
+max(planPerDataD2$SiteFreq)
+
+#Histogram
+hist(planPerDataD2$SiteFreq)
+
+#Add a column called contruct - 1 if construct is detected and 0 if not detected in DevelopmentDescription
+constructCol <- str_detect(planPerDataD2$DevelopmentDescription, regex("construct", ignore_case = TRUE))
+constructCol <- factor(constructCol, levels = c(TRUE, FALSE), labels = c(1, 0))
+planPerDataD2$Construct <- constructCol
+
+#Check the split
+table(planPerDataD2$Construct)
+
+#create a column that is the Frequency count of construct in DevelopmentDescription
+constructFreqCol <- str_count(planPerDataD2$DevelopmentDescription, regex("construct", ignore_case = TRUE))
+constructFreqCol <- as.numeric(constructFreqCol)
+planPerDataD2$ConstructFreq <- constructFreqCol
+
+#Minimum and Maximum
+min(planPerDataD2$ConstructFreq)
+max(planPerDataD2$ConstructFreq)
+
+#Histogram
+hist(planPerDataD2$ConstructFreq)
+
+#Add a column called extens - 1 if extens is detected and 0 if not detected in DevelopmentDescription
+extensCol <- str_detect(planPerDataD2$DevelopmentDescription, regex("extens", ignore_case = TRUE))
+extensCol <- factor(extensCol, levels = c(TRUE, FALSE), labels = c(1, 0))
+planPerDataD2$Extens <- extensCol
+
+#Check the split
+table(planPerDataD2$Extens)
+
+#create a column that is the Frequency count of extens in DevelopmentDescription
+extensFreqCol <- str_count(planPerDataD2$DevelopmentDescription, regex("extens", ignore_case = TRUE))
+extensFreqCol <- as.numeric(extensFreqCol)
+planPerDataD2$ExtensFreq <- extensFreqCol
+
+#Minimum and Maximum
+min(planPerDataD2$ExtensFreq)
+max(planPerDataD2$ExtensFreq)
+
+#Histogram
+hist(planPerDataD2$ExtensFreq)
+
+#Add a column called Permiss - 1 if permiss is detected and 0 if not detected in DevelopmentDescription
+PermissCol <- str_detect(planPerDataD2$DevelopmentDescription, regex("permiss", ignore_case = TRUE))
+PermissCol <- factor(PermissCol, levels = c(TRUE, FALSE), labels = c(1, 0))
+planPerDataD2$Permiss <- PermissCol
+
+#Check the split
+table(planPerDataD2$Permiss)
+
+#create a column that is the Frequency count of permiss in DevelopmentDescription
+permissFreqCol <- str_count(planPerDataD2$DevelopmentDescription, regex("permiss", ignore_case = TRUE))
+permissFreqCol <- as.numeric(permissFreqCol)
+planPerDataD2$PermissFreq <- permissFreqCol
+
+#Minimum and Maximum
+min(planPerDataD2$PermissFreq)
+max(planPerDataD2$PermissFreq)
+
+#Histogram
+hist(planPerDataD2$PermissFreq)
+
+#Add a column called associ - 1 if associ is detected and 0 if not detected in DevelopmentDescription
+AssociCol <- str_detect(planPerDataD2$DevelopmentDescription, regex("associ", ignore_case = TRUE))
+AssociCol <- factor(AssociCol, levels = c(TRUE, FALSE), labels = c(1, 0))
+planPerDataD2$Associ <- AssociCol
+
+#Check the split
+table(planPerDataD2$Associ)
+
+#create a column that is the Frequency count of associ in DevelopmentDescription
+associFreqCol <- str_count(planPerDataD2$DevelopmentDescription, regex("associ", ignore_case = TRUE))
+associFreqCol <- as.numeric(associFreqCol)
+planPerDataD2$AssociFreq <- associFreqCol
+
+#Minimum and Maximum
+min(planPerDataD2$AssociFreq)
+max(planPerDataD2$AssociFreq)
+
+#Histogram
+hist(planPerDataD2$AssociFreq)
+
+#Add a column called new - 1 if new is detected and 0 if not detected in DevelopmentDescription
+NewCol <- str_detect(planPerDataD2$DevelopmentDescription, regex("new", ignore_case = TRUE))
+NewCol <- factor(NewCol, levels = c(TRUE, FALSE), labels = c(1, 0))
+planPerDataD2$New <- NewCol
+
+#Check the split
+table(planPerDataD2$New)
+
+#create a column that is the Frequency count of new in DevelopmentDescription
+newFreqCol <- str_count(planPerDataD2$DevelopmentDescription, regex("new", ignore_case = TRUE))
+newFreqCol <- as.numeric(newFreqCol)
+planPerDataD2$NewFreq <- newFreqCol
+
+#Minimum and Maximum
+min(planPerDataD2$NewFreq)
+max(planPerDataD2$NewFreq)
+
+#Histogram
+hist(planPerDataD2$NewFreq)
+
+#Add a column called apartment - 1 if apartment is detected and 0 if not detected in DevelopmentDescription
+ApartmentCol <- str_detect(planPerDataD2$DevelopmentDescription, regex("apartment", ignore_case = TRUE))
+ApartmentCol <- factor(ApartmentCol, levels = c(TRUE, FALSE), labels = c(1, 0))
+planPerDataD2$Apartment <- ApartmentCol
+
+#Check the split
+table(planPerDataD2$Apartment)
+
+#create a column that is the Frequency count of apartment in DevelopmentDescription
+apartmentFreqCol <- str_count(planPerDataD2$DevelopmentDescription, regex("apartment", ignore_case = TRUE))
+apartmentFreqCol <- as.numeric(apartmentFreqCol)
+planPerDataD2$ApartmentFreq <- apartmentFreqCol
+
+#Minimum and Maximum
+min(planPerDataD2$ApartmentFreq)
+max(planPerDataD2$ApartmentFreq)
+
+#planPerDataD2$AreaOfSiteNorm <- sapply(planPerDataD2$AreaOfSite, function(x) { return((x - min(x)) / (max(x) - min(x))) })
+
+#Ensure Area of Site is numeric
+planPerDataD2$AreaOfSite <- as.numeric(planPerDataD2$AreaOfSite)
+
+#let's have a look at the boxplot and the potential outliers
+boxplot(planPerDataD2$AreaOfSite)
+
+#let's remove the outliers
+outliers <- boxplot(planPerDataD2$AreaOfSite, plot=FALSE)$out
+planPerDataD2[which(planPerDataD2$AreaOfSite %in% outliers),]
+planPerDataD2 <- planPerDataD2[-which(planPerDataD2$AreaOfSite %in% outliers),]
+
+#let's check the boxplot again
+boxplot(planPerDataD2$AreaOfSite)
+
+
+#Add a column called AreaOfSite - Small, Medium, Large
+min(planPerDataD2$AreaOfSite)
+max(planPerDataD2$AreaOfSite)
+
+split <- ((max(planPerDataD2$AreaOfSite))/3)
+
+n <- sapply(planPerDataD2$AreaOfSite, function(x) {is.numeric(x)})
+
+#let's bin the values into categorical ordinals - small, medium and large
+planPerDataD2$AreaOfSiteC[planPerDataD2$AreaOfSite <= split] <- "Small"
+planPerDataD2$AreaOfSiteC[(planPerDataD2$AreaOfSite > split) & (planPerDataD2$AreaOfSite <= 2*split)] <- "Medium"
+planPerDataD2$AreaOfSiteC[planPerDataD2$AreaOfSite > 2*split] <- "Large"
+
+#factor the levels
+planPerDataD2$AreaOfSiteC <- factor(planPerDataD2$AreaOfSiteC, levels = c("Small", "Medium", "Large"), labels = c("Small", "Medium", "Large"))
+
+#check the split
+table(planPerDataD2$AreaOfSiteC)
+
+#check max and min of ApplTextLength
+min(planPerDataD2$ApplTextLength)
+max(planPerDataD2$ApplTextLength)
+
+#let's boxplot the ApplTestLength
+boxplot(planPerDataD2$ApplTextLength)
+
+#remove outliers
+outliers <- boxplot(planPerDataD2$ApplTextLength, plot=FALSE)$out
+planPerDataD2[which(planPerDataD2$ApplTextLength %in% outliers),]
+planPerDataD2 <- planPerDataD2[-which(planPerDataD2$ApplTextLength %in% outliers),]
+
+#check the boxplot
+boxplot(planPerDataD2$ApplTextLength)
+
+#Bin ApplTextLength
+planPerDataD2$ApplTextLengthBinned <- cut(planPerDataD2$ApplTextLength,
+                                       breaks = c(99, 200, 300, 400, 600),
+                                       labels = c("S","M","L","V.L."))
+
+#check the split
+table(planPerDataD2$ApplTextLengthBinned)
+
+#Check if any NAs left in the dataset - none left?
+sapply(planPerDataD2, FUN=function(x) {sum(is.na(x))})
+
+#Save Dataset planPerDataD2 to local as 'mydataproject.csv'
+write.csv(planPerDataD2, file = "mydataproject.csv", row.names=FALSE)
+
+#Load Dataset PA
+planPerDataD2 <- read.csv(file = "mydataproject.csv", header = T, na.strings=c(""), stringsAsFactors = T)
+
+#create train and test data
+set.seed(1337)
+index <- sample(1:dim(planPerDataD2)[1], dim(planPerDataD2)[1]*.75, replace=FALSE)
+train <- planPerDataD2[index, ]
+test <- planPerDataD2[-index, ]
+
+#install a new package ROSE for sampling
+install.packages("ROSE")
+library(ROSE)
+
+#Oversample the data
+OverSample <- ovun.sample(Decision ~ ApplTextLength+ApplType+LocalApplicant+ApplicationType+Exist+ExistFreq+Floor+FloorFreq+Storey+StoreyFreq+Site+SiteFreq+Construct+ConstructFreq+Dwell+DwellFreq+Work+WorkFreq+Extens+ExtensFreq+Associ+AssociFreq+Permiss+PermissFreq+New+NewFreq+AreaOfSiteC+ApplTextLengthBinned, data=train, 
+                                  p=0.5, seed=1, 
+                                  method="over")$data
+
+#Check the new split - much better?
+table(OverSample$Decision)
+
+
+#Let's try a 5-fold C50 (Decision Tree Algo) for the Oversampled data
+library(C50)
+library(caret)
+objControl <- trainControl(method = 'cv', number = 5, returnResamp = 'none',
+    summaryFunction = twoClassSummary, classProbs = T)
+
+objModel <- train(Decision ~ ApplTextLength+ApplType+LocalApplicant+ApplicationType+Exist+ExistFreq+Floor+FloorFreq+Storey+StoreyFreq+Site+SiteFreq+Construct+ConstructFreq+Dwell+DwellFreq+Work+WorkFreq+Extens+ExtensFreq+Associ+AssociFreq+Permiss+PermissFreq+New+NewFreq+AreaOfSiteC+ApplTextLengthBinned, data = OverSample,
+                  method='C5.0',
+                  trControl=objControl,
+                  metric='ROC',
+                  preProc = c("center","scale"))
+
+#check the summary
+summary(objModel)
+#print
+print(objModel)
+
+#then let's plot
+plot(objModel)
+
+predTuned <- predict(objModel, test[,-1])
+
+#Let's have a look at the confusion matrix - isn't too bad; specificity could be better.
+caret::confusionMatrix(test$Decision, predTuned, positive="Yes")
+
+#let's try randomForest on the Oversample data
+library(randomForest)
+forestOverSample <- randomForest(Decision ~ ApplTextLength+ApplType+LocalApplicant+ApplicationType+Exist+ExistFreq+Floor+FloorFreq+Storey+StoreyFreq+Site+SiteFreq+Construct+ConstructFreq+Dwell+DwellFreq+Work+WorkFreq+Extens+ExtensFreq+Associ+AssociFreq+Permiss+PermissFreq+New+NewFreq+AreaOfSiteC+ApplTextLengthBinned, OverSample, importance=TRUE, ntree=1000)
+
+#let's plot the error
+plot(forestOverSample)
+
+#let's check which variables have an impact on the accuracy - ApplTestLength? The more detailed an application the easier it is for someone to make a decision on the application - to accept or reject.
+varImpPlot(forestOverSample)
+
+#Random Forest with Oversampling
+rf <- predict(forestOverSample, test, type ="class")
+
+#Accuracy of RF with OS
+caret::confusionMatrix(rf, test$Decision, positive="Yes")
+
+library(partykit)
+
+
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+
+#for the craic let's try regression Tree (CART)
+regressionTree <- rpart(Decision ~ ApplTextLength+ApplType+LocalApplicant+ApplicationType+Exist+ExistFreq+Floor+FloorFreq+Storey+StoreyFreq+Site+SiteFreq+Construct+ConstructFreq+Dwell+DwellFreq+Work+WorkFreq+Extens+ExtensFreq+Associ+AssociFreq+Permiss+PermissFreq+New+NewFreq+AreaOfSiteC+ApplTextLengthBinned, OverSample, method="class")
+fancyRpartPlot(regressionTree)
+rpartPredication <- predict(regressionTree, test, type="class")
+
+#let's try the confusion matrix to see if it is any good. That wasn't very good, was it?
+caret::confusionMatrix(rpartPredication, test$Decision, positive="Yes")
+
+#let's try again for CART for minsplit equals 200 
+newRpart <- rpart(Decision ~ ApplTextLength+ApplType+LocalApplicant+ApplicationType+Exist+ExistFreq+Floor+FloorFreq+Storey+StoreyFreq+Site+SiteFreq+Construct+ConstructFreq+Dwell+DwellFreq+Work+WorkFreq+Extens+ExtensFreq+Associ+AssociFreq+Permiss+PermissFreq+New+NewFreq+AreaOfSiteC+ApplTextLengthBinned, data = OverSample, method="class", control=rpart.control(minsplit = 200, cp=0))
+fancyRpartPlot(newRpart)
+rpartPredication <- predict(newRpart, test, type="class")
+
+#An improvement? Yes, much better. More splits on node improves the accuracy.
+caret::confusionMatrix(rpartPredication, test$Decision, positive="Yes")
+
+#Let's try undersampling the data
+underSampleData <- ovun.sample(Decision ~ ApplTextLength+ApplType+LocalApplicant+ApplicationType+Exist+ExistFreq+Floor+FloorFreq+Storey+StoreyFreq+Site+SiteFreq+Construct+ConstructFreq+Dwell+DwellFreq+Work+WorkFreq+Extens+ExtensFreq+Associ+AssociFreq+Permiss+PermissFreq+New+NewFreq+AreaOfSiteC+ApplTextLengthBinned, data=train,
+                                   p=0.5, seed=1, 
+                                   method="under")$data
+
+#let's check the split in our dependent variable. Hmmm, a very small sample. This isn't going to be good.
+table(underSampleData$Decision)
+
+install.packages("randomForest")
+library(randomForest)
+forest <- randomForest(Decision ~ ApplTextLength+ApplType+LocalApplicant+ApplicationType+Exist+ExistFreq+Floor+FloorFreq+Storey+StoreyFreq+Site+SiteFreq+Construct+ConstructFreq+Dwell+DwellFreq+Work+WorkFreq+Extens+ExtensFreq+Associ+AssociFreq+Permiss+PermissFreq+New+NewFreq+AreaOfSiteC+ApplTextLengthBinned, underSampleData, importance=TRUE, ntree=2000)
+
+#let's check the variables that influence the accuracy.
+varImpPlot(forest)
+rf <- predict(forest, test, type ="class")
+
+#let's check the confusion matrix.
+caret::confusionMatrix(rf, test$Decision, positive="Yes")
+
+
+#No under or over sampling. Let's try on our skewed dataset just for comparison's sake.
+set.seed(1337)
+index <- sample(1:dim(planPerDataD2)[1], dim(planPerDataD2)[1]*.75, replace=FALSE)
+trainRF <- planPerDataD2[index, ]
+testRF <- planPerDataD2[-index, ]
+library(randomForest)
+forest <- randomForest(Decision ~ ApplTextLength+ApplType+LocalApplicant+ApplicationType+Exist+ExistFreq+Floor+FloorFreq+Storey+StoreyFreq+Site+SiteFreq+Construct+ConstructFreq+Dwell+DwellFreq+Work+WorkFreq+Extens+ExtensFreq+Associ+AssociFreq+Permiss+PermissFreq+New+NewFreq+AreaOfSiteC+ApplTextLengthBinned, trainRF, importance=TRUE, ntree=2000)
+
+#let's check the variables that influence the accuracy
+varImpPlot(forest)
+rf <- predict(forest, testRF, type ="class")
+
+#let's check the confusion matrix. Accuracies high but that's because our dataset is skewed 90-10 in favour of passes; look at the specificity, not good.
+caret::confusionMatrix(rf, testRF$Decision, positive="Yes")
+
+#and now for something completely different (well, not quite): Random Search sampling
+library(caret)
+control <- trainControl(method="repeatedcv", number=10, repeats=3, search="random")
+mtry <- sqrt(ncol(planPerDataD2))
+metric <- "Accuracy"
+
+#cup of tea anyone? This may take all day. [WARNING: MAY TAKE A LONG TIME!!!]
+rf_random <- train(Decision~ApplTextLength+ApplType+LocalApplicant+ApplicationType+Exist+ExistFreq+Floor+FloorFreq+Storey+StoreyFreq+Site+SiteFreq+Construct+ConstructFreq+Dwell+DwellFreq+Work+WorkFreq+Extens+ExtensFreq+Associ+AssociFreq+Permiss+PermissFreq+New+NewFreq+AreaOfSiteC+ApplTextLengthBinned, data=train, method="rf", metric=metric, tuneLength=15, trControl=control)
+
+#hopefully your computer hasn't crashed out on you. If it hasn't let's have a look at the printout:
+print(rf_random)
+
+#let's plot accuracy v randomly selected predictors
+plot(rf_random)
+
+# Rose - RANDOM OVER-SAMPLE EXAMPLES (without Numerical - Frequency of words).
+rosedatasample <- ROSE(Decision ~ ApplTextLength+LocalApplicant+Exist+Floor+Storey+Construct+Dwell+Extens+Associ+Permiss+New+AreaOfSiteC+ApplTextLengthBinned, data = train, seed = 1)$data
+
+forest <- randomForest(Decision ~ ApplTextLength+LocalApplicant+Exist+Floor+Storey+Construct+Dwell+Extens+Associ+Permiss+New+AreaOfSiteC+ApplTextLengthBinned, rosedatasample, importance=TRUE, ntree=1000)
+plot(forest)
+
+#let's have a look at the VIP.
+varImpPlot(forest)
+rf <- predict(forest, test, type ="class")
+#Let's check out the Confusion Matrix. That seems to be the best we've got so far.
+caret::confusionMatrix(rf, test$Decision, positive="Yes")
+
+
+#Finally let's try Rose - RANDOM OVER-SAMPLE EXAMPLES - but this time by introducing our numericals - Frequency of root words.
+rosedatasample <- ROSE(Decision ~ ApplTextLength+ApplType+LocalApplicant+ApplicationType+Exist+ExistFreq+Floor+FloorFreq+Storey+StoreyFreq+Site+SiteFreq+Construct+ConstructFreq+Dwell+DwellFreq+Work+WorkFreq+Extens+ExtensFreq+Associ+AssociFreq+Permiss+PermissFreq+New+NewFreq+AreaOfSiteC+ApplTextLengthBinned, data = train, seed = 1)$data
+
+forest <- randomForest(Decision ~ ApplTextLength+ApplType+LocalApplicant+ApplicationType+Exist+ExistFreq+Floor+FloorFreq+Storey+StoreyFreq+Site+SiteFreq+Construct+ConstructFreq+Dwell+DwellFreq+Work+WorkFreq+Extens+ExtensFreq+Associ+AssociFreq+Permiss+PermissFreq+New+NewFreq+AreaOfSiteC+ApplTextLengthBinned, rosedatasample, importance=TRUE, ntree=1000)
+plot(forest)
+
+#let's have a look at the VIP, one last time.
+varImpPlot(forest)
+
+rf <- predict(forest, test, type ="class")
+#How did that do? Not as good as the above?
+caret::confusionMatrix(rf, test$Decision, positive="Yes")
