@@ -1,0 +1,184 @@
+setwd("C:\\Users\\Julians Laptop\\Desktop\\Data Analytics\\Advanced Data Mining\\Getting Started\\")
+titanicData <- read.csv("titanic.csv", header=T, na.strings=c(""), stringsAsFactors = T)
+titanicData$Survived <- factor(titanicData$Survived, levels = c(0,1), labels = c("No","Yes"))
+titanicData$Pclass <- as.factor(titanicData$Pclass)
+#remove features 1 and 11
+titanicData <- titanicData[, -c(1, 11)]
+#result of Embarked imputation exercise
+titanicData$Embarked[c(62, 830)] <- 'C'
+summary(titanicData$Embarked)
+#use a random forest to impute missing age values
+library(mice)
+mice_mod <- mice(titanicData[, !names(titanicData) %in% 
+                               c('PassengerId','Name','Ticket','Cabin','Survived')], method = 'rf')
+mice_output <- complete(mice_mod)
+titanicData$Age <- mice_output$Age
+#feature engineering: make a feature to represent a passenger is a child
+titanicData$Child[titanicData$Age < 18] <- "Yes"
+titanicData$Child[titanicData$Age >= 18] <- "No"
+titanicData$Child <- factor(titanicData$Child)
+#feature engineer a title feature
+rare_title <- c('Dona', 'Lady', 'the Countess', 'Capt', 'Col', 'Don',
+                'Dr', 'Major', 'Rev', 'Sir', 'Jonkheer')
+titanicData$Title <- gsub('(.*, )|(\\..*)', '', titanicData$Name)
+titanicData$Title[titanicData$Title == 'Mlle'] <- 'Miss'
+titanicData$Title[titanicData$Title == 'Ms'] <- 'Miss'
+titanicData$Title[titanicData$Title == 'Mme'] <- 'Mrs'
+titanicData$Title[titanicData$Title %in% rare_title] <- 'Rare Title'
+titanicData$Title <- as.factor(titanicData$Title)
+#feature engineer a few more things using the passenger name
+titanicData$Name <- as.character(titanicData$Name)
+titanicData$Surname <- sapply(titanicData$Name, 
+                              FUN=function(x) {strsplit(x, split='[,.]')[[1]][1]})
+titanicData$Fsize <- titanicData$SibSp + titanicData$Parch + 1
+#remove feature 3, 7, and 11
+titanicData[3] <- NULL
+titanicData[7] <- NULL
+titanicData[11] <- NULL
+#feature engineer a family size categorical variable
+titanicData$FsizeD[titanicData$Fsize == 1] <- 'singleton'
+titanicData$FsizeD[titanicData$Fsize < 5 & titanicData$Fsize > 1] <- 'small'
+titanicData$FsizeD[titanicData$Fsize > 4] <- 'large'
+titanicData$FsizeD <-as.factor(titanicData$FsizeD)
+contrasts(titanicData$Sex)
+contrasts(titanicData$Pclass)
+
+
+set.seed(1337)
+index <- sample(1:dim(titanicData)[1], dim(titanicData)[1]* .8, replace =FALSE)
+training <- titanicData[index, ]
+testing <- titanicData[-index, ]
+logit <- glm(Survived ~., family=binomial(link='logit'),data=training)
+summary(logit)
+plot(logit)
+anova(logit, test = "Chisq")
+install.packages("pscl")
+library(pscl)
+pR2(logit)
+logit.prediction <- predict(logit,newdata=testing,type='response')
+results.logit <- ifelse(logit.prediction > 0.5, "Yes", "No")
+library(caret)
+for (i in 1:10) {
+  
+  results.logit <- ifelse(logit.prediction > (i/10),"Yes","No")
+  results.logit <- factor(results.logit, levels = c("No", "Yes"), labels = c("No", "Yes"))
+  
+  cf <- confusionMatrix(results.logit, testing$Survived, positive = "Yes")
+  if (i == 1) {
+    results <- as.data.frame(t(cf$byClass))
+    results <- cbind(results, as.data.frame(t(cf$overall)))
+  } else {
+    df <- as.data.frame(t(cf$byClass))
+    df <- cbind(df, as.data.frame(t(cf$overall)))
+    results <- rbind(results, df)
+  }
+}
+
+par(mfrow=c(2,3))
+plot(results$Sensitivity, main = "Sensitivity over i", ylab = "Sensitivity", xlab = "i")
+plot(results$Specificity, main = "Specificity over i", ylab="Specificity", xlab = "i")
+plot(results$Accuracy, main = "Accuracy over i", ylab ="Accuracy", xlab="i")
+plot(results$Kappa, main = "Kappa over i", ylab="Kappa", xlab="i")
+plot(results$Precision, main = "Precision over i", ylab="Precision", xlab="i")
+plot(results$Recall, main = "Recall over i", ylab="Recall", xlab="i")
+
+for (i in 1:100) {
+  index <- sample(1:dim(titanicData)[1], dim(titanicData[1]) * .75, replace=FALSE)
+  training <- titanicData[index, ]
+  testing <- titanicData[-index, ]
+  
+  logit <- glm(Survived ~.,family=binomial(link='logit'),data=training)
+  logit.prediction <- predict(logit,newdata=testing,type='response')
+  results.logit <- ifelse(logit.prediction > .65,"Yes","No")
+  results.logit <- factor(results.logit, levels = c("No", "Yes"), labels = c("No","Yes"))
+  cf <- confusionMatrix(results.logit, testing$Survived, positive ="Yes")
+  
+  if (i == 1) {
+    results <- as.data.frame(t(cf$byClass))
+    results <- cbind(results, as.data.frame(t(cf$overall)))
+  } else {
+    df <- as.data.frame(t(cf$byClass))
+    df <- cbind(df, as.data.frame(t(cf$overall)))
+    results <- rbind(results, df)
+  }
+}
+
+str(results)
+par(mfrow=c(1,1))
+boxplot(results[,c(1,2,5,6,12, 13)])  
+
+n <- sapply(titanicData, function(x) {is.numeric(x)})
+n
+numerics <-titanicData[, n]
+numerics
+summary(numerics)
+normalize <- function(x) { return ((x - min(x)) / (max(x) - min(x))) }
+numericsNormal <- normalize(numerics)
+summary(numericsNormal)
+
+par(mfrow=c(1,2))
+hist(titanicData$Age)
+hist(numericsNormal$Age)
+
+titanicDataKNN <- titanicData[, !n]
+titanicDataKNN <- cbind(titanicDataKNN, numericsNormal)
+
+install.packages("dummies")
+library(dummies)
+tkNN <- dummy.data.frame(titanicDataKNN[, -1])
+summary(tkNN)
+Survived <- titanicDataKNN$Survived
+
+index <- sample(1:dim(tkNN)[1], dim(tkNN) * .8, replace=FALSE)
+kNNTraining <- tkNN[index, ]
+kNNTesting <- tkNN[-index, ]
+survivedTrain <- Survived[index]
+survivedTest <- Survived[-index]
+
+install.packages("ModelMetrics")
+library(ModelMetrics)
+
+library(class)
+folds <- createFolds(Survived, k = 10)
+cv_results <- lapply(folds, function(x) {
+  knn_train <- tkNN[x, ]
+  knn_test <- tkNN[-x, ]
+  survivedTrain <- Survived[x]
+  survivedTest <- Survived[-x]
+  knn_model <- knn(knn_train, knn_test, survivedTrain, k=3)
+  a <- auc(survivedTest, knn_model)
+  return(a)
+})
+
+auroc <- unlist(cv_results)
+summary(auroc)
+
+train_control <- trainControl(method="cv", number=10)
+model <- train(y=Survived, x=tkNN, trControl=train_control, method="knn")
+print(model)
+
+k1 <- round(sqrt(dim(kNNTraining)[1]))
+k2 <- round(sqrt(dim(kNNTraining)[2]))
+k3 <- 7
+
+library(class)
+knn1 <- knn(kNNTraining, kNNTesting, survivedTrain, k=k1)
+knn2 <- knn(kNNTraining, kNNTesting, survivedTrain, k=k2)
+knn3 <- knn(kNNTraining, kNNTesting, survivedTrain, k=k3)
+
+perf <- c()
+folds <- createFolds(Survived, k = 10)
+for (i in 1:30) {
+  cv_results <- lapply(folds, function(x) {
+    knn_train <- tkNN[x, ]
+    knn_test <- tkNN[-x, ]
+    survivedTrain <- Survived[x]
+    survivedTest <- Survived[-x]
+    knn_model <- knn(knn_train, knn_test, survivedTrain, k=i)
+    a <- auc(survivedTest, knn_model)
+    return(a)
+  })
+  perf[i] <- mean(unlist(cv_results))
+}
+
+plot(perf, xlab ="k", ylab="AUROC")
